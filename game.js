@@ -267,11 +267,23 @@ function endGame() {
 // Event listeners
 startButton.addEventListener("click", startGame);
 
-// TODO: Step 2 - Implement Loading Progress Indicator
-// Create a function checkTensorFlowLoaded():
+// Check if TensorFlow.js is loaded
+function checkTensorFlowLoaded() {
+  if (typeof tf !== "undefined" && typeof handPoseDetection !== "undefined") {
+    // TensorFlow.js and dependencies loaded
+    loadingOverlay.classList.add("hidden");
+  } else {
+    // Check again after a short delay
+    setTimeout(checkTensorFlowLoaded, 100);
+  }
+}
 
-// Start checking once DOM is loaded:
-
+// Start checking once DOM is loaded
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", checkTensorFlowLoaded);
+} else {
+  checkTensorFlowLoaded();
+}
 
 // Initial render
 render();
