@@ -6,12 +6,60 @@ const config = {
   bounceVelocity: -8,
   handRadius: 50,
   countdownTime: 3,
+  particleCount: 15, // Particles per bounce
 };
+
+// Particle class
+class Particle {
+  constructor(x, y, color) {
+    this.x = x;
+    this.y = y;
+    this.vx = (Math.random() - 0.5) * 8;
+    this.vy = (Math.random() - 0.5) * 8 - 2; // Bias upward
+    this.life = 1.0; // 1.0 = full life, 0 = dead
+    this.decay = Math.random() * 0.02 + 0.01; // How fast it fades
+    this.size = Math.random() * 4 + 2;
+    this.color = color;
+    this.gravity = 0.15;
+  }
+
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vy += this.gravity;
+    this.life -= this.decay;
+    return this.life > 0; // Return false when dead
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.globalAlpha = this.life;
+    
+    // Outer glow
+    const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size * 2);
+    gradient.addColorStop(0, this.color);
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size * 2, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Inner bright core
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
+  }
+}
 
 // Game state
 let gameState = {
   balls: [],
   hands: [],
+  particles: [],
   score: 0,
   highScore: 0,
   gameOver: false,
@@ -59,6 +107,23 @@ async function saveHighScore(score) {
   }
 }
 
+// Create particle burst at position
+function createParticleBurst(x, y, color) {
+  for (let i = 0; i < config.particleCount; i++) {
+    gameState.particles.push(new Particle(x, y, color));
+  }
+}
+
+// Update all particles
+function updateParticles() {
+  gameState.particles = gameState.particles.filter(particle => particle.update());
+}
+
+// Draw all particles
+function drawParticles() {
+  gameState.particles.forEach(particle => particle.draw(ctx));
+}
+
 // Initialize balls
 function initBalls() {
   gameState.balls = [];
@@ -89,12 +154,18 @@ function updateBalls() {
       ball.vx *= -1;
       ball.x =
         ball.x < canvas.width / 2 ? ball.radius : canvas.width - ball.radius;
+      
+      // Wall bounce particles
+      createParticleBurst(ball.x, ball.y, 'rgba(255, 255, 255, 0.6)');
     }
 
     // Bounce off top
     if (ball.y - ball.radius < 0) {
       ball.vy *= -1;
       ball.y = ball.radius;
+      
+      // Ceiling bounce particles
+      createParticleBurst(ball.x, ball.y, 'rgba(255, 255, 255, 0.6)');
     }
   });
 }
@@ -110,6 +181,13 @@ function checkCollisions() {
 
       // Check if ball is colliding with hand zone
       if (distance < ball.radius + config.handRadius) {
+        // Create particle burst at collision point
+        const collisionX = hand.x + (dx / distance) * config.handRadius;
+        const collisionY = hand.y + (dy / distance) * config.handRadius;
+        
+        // Use ball color for particles
+        createParticleBurst(collisionX, collisionY, ball.color);
+        
         // Bounce ball upward
         ball.vy = config.bounceVelocity;
 
@@ -167,21 +245,46 @@ function render() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
+  // Draw particles first (behind everything)
+  drawParticles();
+
   // Draw balls
   gameState.balls.forEach((ball) => {
+    // Ball shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.beginPath();
+    ctx.ellipse(ball.x, ball.y + ball.radius + 5, ball.radius * 0.8, ball.radius * 0.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ball
     ctx.fillStyle = ball.color;
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Add white outline for visibility
+    // Ball outline
     ctx.strokeStyle = "white";
     ctx.lineWidth = 2;
     ctx.stroke();
+    
+    // Ball shine
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.beginPath();
+    ctx.arc(ball.x - ball.radius * 0.3, ball.y - ball.radius * 0.3, ball.radius * 0.3, 0, Math.PI * 2);
+    ctx.fill();
   });
 
   // Draw hand zones as paddles
   gameState.hands.forEach((hand, index) => {
+    // Hand glow effect
+    const glowGradient = ctx.createRadialGradient(hand.x, hand.y, 0, hand.x, hand.y, config.handRadius * 1.5);
+    glowGradient.addColorStop(0, 'rgba(100, 200, 255, 0.3)');
+    glowGradient.addColorStop(1, 'rgba(100, 200, 255, 0)');
+    ctx.fillStyle = glowGradient;
+    ctx.beginPath();
+    ctx.arc(hand.x, hand.y, config.handRadius * 1.5, 0, Math.PI * 2);
+    ctx.fill();
+
     // Outer circle
     ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
     ctx.lineWidth = 4;
@@ -242,6 +345,7 @@ function gameLoop() {
     // Only update game logic after countdown finishes
     updateBalls();
     checkCollisions();
+    updateParticles();
     updateScore();
 
     // Check lose condition
@@ -261,6 +365,7 @@ async function startGame() {
   gameState.startTime = null;
   gameState.score = 0;
   gameState.hands = [];
+  gameState.particles = [];
   gameState.countdown = config.countdownTime;
   gameState.isCountingDown = true;
   gameState.isNewHighScore = false;
