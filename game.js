@@ -13,11 +13,13 @@ let gameState = {
   balls: [],
   hands: [],
   score: 0,
+  highScore: 0,
   gameOver: false,
   startTime: null,
   animationId: null,
   countdown: 0,
   isCountingDown: false,
+  isNewHighScore: false,
 };
 
 // Canvas setup
@@ -28,9 +30,34 @@ const ctx = canvas.getContext("2d");
 const overlay = document.getElementById("overlay");
 const startButton = document.getElementById("startButton");
 const scoreDisplay = document.getElementById("score");
+const highScoreDisplay = document.getElementById("highScore");
 const overlayMessage = document.getElementById("overlayMessage");
 const loadingOverlay = document.getElementById("loadingOverlay");
 const loadingStatus = document.getElementById("loadingStatus");
+
+// Load high score from storage
+async function loadHighScore() {
+  try {
+    const result = await window.storage.get('airJugglerHighScore');
+    if (result && result.value) {
+      gameState.highScore = parseInt(result.value);
+      highScoreDisplay.textContent = gameState.highScore;
+    }
+  } catch (error) {
+    console.log('No high score found, starting fresh');
+    gameState.highScore = 0;
+  }
+}
+
+// Save high score to storage
+async function saveHighScore(score) {
+  try {
+    await window.storage.set('airJugglerHighScore', score.toString());
+    console.log('High score saved:', score);
+  } catch (error) {
+    console.error('Error saving high score:', error);
+  }
+}
 
 // Initialize balls
 function initBalls() {
@@ -112,12 +139,20 @@ function updateScore() {
   if (gameState.startTime && !gameState.gameOver) {
     gameState.score = Math.floor((Date.now() - gameState.startTime) / 1000);
     scoreDisplay.textContent = gameState.score;
+    
+    // Check if new high score
+    if (gameState.score > gameState.highScore) {
+      gameState.isNewHighScore = true;
+      gameState.highScore = gameState.score;
+      highScoreDisplay.textContent = gameState.highScore;
+      highScoreDisplay.classList.add('beating-record');
+    }
   }
 }
 
 // Render everything
 function render() {
-  // Draw video feed directly onto canvas (provided)
+  // Draw video feed directly onto canvas
   const webcam = document.getElementById("webcam");
   if (webcam && webcam.readyState === webcam.HAVE_ENOUGH_DATA) {
     ctx.save();
@@ -228,11 +263,13 @@ async function startGame() {
   gameState.hands = [];
   gameState.countdown = config.countdownTime;
   gameState.isCountingDown = true;
+  gameState.isNewHighScore = false;
+  
+  // Remove beating record animation
+  highScoreDisplay.classList.remove('beating-record');
 
   initBalls();
 
-  // TODO: Step 7 - Integrate Hand Tracking with Game
-  // Initialize hand tracking if not already done:
   // Initialize hand tracking if not already done
   if (!window.handTrackingInitialized) {
     // Show loading overlay
@@ -247,7 +284,7 @@ async function startGame() {
     const success = await window.handTracking.setupHandTracking(
       webcam,
       function receiveHands(hands) {
-        gameState.hands = hands; // Update game state with detected hands
+        gameState.hands = hands;
       },
     );
 
@@ -268,27 +305,49 @@ async function startGame() {
 }
 
 // End game
-function endGame() {
+async function endGame() {
   gameState.gameOver = true;
   cancelAnimationFrame(gameState.animationId);
 
-  // Create game over message with better formatting
-  const emoji =
-    gameState.score > 30 ? "🎉" : gameState.score > 15 ? "👏" : "💪";
-  const message =
-    gameState.score > 30
-      ? "Amazing!"
-      : gameState.score > 15
-        ? "Great Job!"
-        : "Game Over!";
+  // Save high score if it's a new record
+  if (gameState.isNewHighScore) {
+    await saveHighScore(gameState.highScore);
+  }
+
+  // Create game over message with high score indicator
+  let emoji, message, extraMessage;
+  
+  if (gameState.isNewHighScore) {
+    emoji = "🏆";
+    message = "NEW HIGH SCORE!";
+    extraMessage = `You survived ${gameState.score} seconds!`;
+  } else if (gameState.score > 30) {
+    emoji = "🎉";
+    message = "Amazing!";
+    extraMessage = `You survived ${gameState.score} seconds`;
+  } else if (gameState.score > 15) {
+    emoji = "👍";
+    message = "Great Job!";
+    extraMessage = `You survived ${gameState.score} seconds`;
+  } else {
+    emoji = "💪";
+    message = "Game Over!";
+    extraMessage = `You survived ${gameState.score} seconds`;
+  }
 
   overlayMessage.innerHTML = `
-        <div style="font-size: 3rem; margin-bottom: 0.5rem;">${emoji}</div>
-        <div style="font-size: 2rem; margin-bottom: 0.5rem;">${message}</div>
-        <div style="font-size: 1.2rem; color: #666; font-family: 'Poppins', sans-serif; font-weight: 600;">
-            You survived ${gameState.score} seconds
-        </div>
-    `;
+    <div style="font-size: 3rem; margin-bottom: 0.5rem;">${emoji}</div>
+    <div style="font-size: 2rem; margin-bottom: 0.5rem;">${message}</div>
+    <div style="font-size: 1.2rem; color: #666; font-family: 'Poppins', sans-serif; font-weight: 600;">
+      ${extraMessage}
+    </div>
+    ${gameState.highScore > 0 ? `
+      <div style="font-size: 1rem; color: #999; margin-top: 0.5rem;">
+        High Score: ${gameState.highScore}s
+      </div>
+    ` : ''}
+  `;
+  
   startButton.textContent = "Play Again";
   overlay.classList.remove("hidden");
 }
@@ -309,9 +368,13 @@ function checkTensorFlowLoaded() {
 
 // Start checking once DOM is loaded
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", checkTensorFlowLoaded);
+  document.addEventListener("DOMContentLoaded", async () => {
+    checkTensorFlowLoaded();
+    await loadHighScore();
+  });
 } else {
   checkTensorFlowLoaded();
+  loadHighScore();
 }
 
 // Initial render

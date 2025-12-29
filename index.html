@@ -34,8 +34,15 @@
       </div>
 
       <!-- Score display -->
-      <div id="scoreDisplay">
-        <p>Time: <span id="score">0</span>s</p>
+      <div class="stats-container">
+        <div id="scoreDisplay" class="stat-box">
+          <p class="stat-label">Time</p>
+          <p class="stat-value"><span id="score">0</span>s</p>
+        </div>
+        <div id="highScoreDisplay-container" class="stat-box high-score-box">
+          <p class="stat-label">High Score</p>
+          <p class="stat-value">🏆 <span id="highScore">0</span>s</p>
+        </div>
       </div>
     </div>
 
@@ -48,7 +55,7 @@
       </div>
     </div>
 
-        <!-- Load TensorFlow.js and MediaPipe Hands -->
+    <!-- Load TensorFlow.js and MediaPipe Hands -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
