@@ -2,8 +2,8 @@
 const config = {
   ballCount: 1,
   ballRadius: 20,
-  gravity: 0.2,
-  bounceVelocity: -8,
+  gravity: 0.35,
+  bounceVelocity: -10,
   handRadius: 50,
   countdownTime: 3,
   particleCount: 15,
@@ -24,12 +24,12 @@ class Barrier {
     this.y = y;
     this.width = width;
     this.height = height;
-    this.color = 'rgba(255, 100, 100, 0.7)';
+    this.color = 'rgba(139, 92, 246, 0.6)';
   }
 
   draw(ctx) {
     // Outer glow
-    ctx.shadowColor = 'rgba(255, 100, 100, 0.8)';
+    ctx.shadowColor = 'rgba(139, 92, 246, 0.8)';
     ctx.shadowBlur = 20;
     
     ctx.fillStyle = this.color;
@@ -38,18 +38,19 @@ class Barrier {
     // Reset shadow
     ctx.shadowBlur = 0;
     
-    // Border
-    ctx.strokeStyle = 'rgba(255, 150, 150, 1)';
+    // Border with electric effect
+    ctx.strokeStyle = 'rgba(167, 139, 250, 1)';
     ctx.lineWidth = 3;
     ctx.strokeRect(this.x, this.y, this.width, this.height);
     
-    // Diagonal stripes
-    ctx.strokeStyle = 'rgba(255, 200, 200, 0.5)';
+    // Electric zigzag pattern
+    ctx.strokeStyle = 'rgba(196, 181, 253, 0.6)';
     ctx.lineWidth = 2;
-    for (let i = 0; i < this.width + this.height; i += 15) {
+    for (let i = 0; i < this.width; i += 20) {
       ctx.beginPath();
       ctx.moveTo(this.x + i, this.y);
-      ctx.lineTo(this.x, this.y + i);
+      ctx.lineTo(this.x + i + 10, this.y + this.height / 2);
+      ctx.lineTo(this.x + i + 5, this.y + this.height);
       ctx.stroke();
     }
   }
@@ -178,7 +179,7 @@ const loadingStatus = document.getElementById("loadingStatus");
 // Load high score from storage
 async function loadHighScore() {
   try {
-    const result = await window.storage.get('airJugglerHighScore');
+    const result = await window.storage.get('stormKeeperHighScore');
     if (result && result.value) {
       gameState.highScore = parseInt(result.value);
       highScoreDisplay.textContent = gameState.highScore;
@@ -192,7 +193,7 @@ async function loadHighScore() {
 // Save high score to storage
 async function saveHighScore(score) {
   try {
-    await window.storage.set('airJugglerHighScore', score.toString());
+    await window.storage.set('stormKeeperHighScore', score.toString());
     console.log('High score saved:', score);
   } catch (error) {
     console.error('Error saving high score:', error);
@@ -215,36 +216,37 @@ function addChallenge() {
   switch (randomChallenge) {
     case CHALLENGES.SPEED_UP:
       gameState.currentGravity += 0.15;
-      showChallengeNotification('⚡ SPEED BOOST!');
-      createParticleBurst(canvas.width / 2, 50, 'rgba(255, 255, 0, 0.8)');
+      showChallengeNotification('⚡ STORM INTENSIFIES!');
+      createParticleBurst(canvas.width / 2, 50, 'rgba(255, 255, 100, 0.8)');
       break;
       
     case CHALLENGES.MULTI_BALL:
       addNewBall();
-      showChallengeNotification('🔴 SECOND BALL!');
+      showChallengeNotification('💧 ANOTHER ORB FALLS!');
       break;
       
     case CHALLENGES.BARRIERS:
       addBarriers();
-      showChallengeNotification('🚧 BARRIERS APPEAR!');
+      showChallengeNotification('🌩️ LIGHTNING STRIKES!');
       break;
   }
 }
 
 // Add a new ball
 function addNewBall() {
-  const hue = gameState.balls.length * 120;
+  const stormColors = ['rgba(96, 165, 250, 0.9)', 'rgba(147, 197, 253, 0.9)', 'rgba(59, 130, 246, 0.9)', 'rgba(125, 211, 252, 0.9)'];
+  const colorIndex = gameState.balls.length % stormColors.length;
   gameState.balls.push({
     x: canvas.width / 2,
     y: 100,
     vx: (Math.random() - 0.5) * 4,
     vy: 2,
     radius: config.ballRadius,
-    color: `hsl(${hue}, 70%, 60%)`,
+    color: stormColors[colorIndex],
   });
   
   // Particle burst for new ball
-  createParticleBurst(canvas.width / 2, 100, `hsl(${hue}, 70%, 60%)`);
+  createParticleBurst(canvas.width / 2, 100, stormColors[colorIndex]);
 }
 
 // Add random barriers
@@ -281,6 +283,7 @@ function drawParticles() {
 // Initialize balls
 function initBalls() {
   gameState.balls = [];
+  const stormColors = ['rgba(96, 165, 250, 0.9)', 'rgba(147, 197, 253, 0.9)', 'rgba(59, 130, 246, 0.9)'];
   for (let i = 0; i < config.ballCount; i++) {
     gameState.balls.push({
       x: canvas.width / 2,
@@ -288,7 +291,7 @@ function initBalls() {
       vx: 0,
       vy: 0,
       radius: config.ballRadius,
-      color: `hsl(${i * 120}, 70%, 60%)`,
+      color: stormColors[i % stormColors.length],
     });
   }
 }
@@ -307,7 +310,7 @@ function updateBalls() {
     gameState.barriers.forEach(barrier => {
       if (barrier.checkCollision(ball)) {
         barrier.bounceOff(ball);
-        createParticleBurst(ball.x, ball.y, 'rgba(255, 100, 100, 0.8)');
+        createParticleBurst(ball.x, ball.y, 'rgba(167, 139, 250, 0.8)');
       }
     });
 
@@ -317,7 +320,7 @@ function updateBalls() {
       ball.x =
         ball.x < canvas.width / 2 ? ball.radius : canvas.width - ball.radius;
       
-      createParticleBurst(ball.x, ball.y, 'rgba(255, 255, 255, 0.6)');
+      createParticleBurst(ball.x, ball.y, 'rgba(147, 197, 253, 0.7)');
     }
 
     // Bounce off top
@@ -325,7 +328,7 @@ function updateBalls() {
       ball.vy *= -1;
       ball.y = ball.radius;
       
-      createParticleBurst(ball.x, ball.y, 'rgba(255, 255, 255, 0.6)');
+      createParticleBurst(ball.x, ball.y, 'rgba(147, 197, 253, 0.7)');
     }
   });
 }
@@ -398,19 +401,24 @@ function drawNotification() {
     ctx.globalAlpha = alpha;
     
     // Background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
     ctx.fillRect(canvas.width / 2 - 150, 80, 300, 60);
     
-    // Border
-    ctx.strokeStyle = 'rgba(255, 215, 0, 0.8)';
+    // Border with glow
+    ctx.shadowColor = 'rgba(147, 197, 253, 0.8)';
+    ctx.shadowBlur = 15;
+    ctx.strokeStyle = 'rgba(147, 197, 253, 0.8)';
     ctx.lineWidth = 3;
     ctx.strokeRect(canvas.width / 2 - 150, 80, 300, 60);
+    ctx.shadowBlur = 0;
     
     // Text
-    ctx.fillStyle = 'white';
-    ctx.font = 'bold 24px Arial';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.font = 'bold 22px Inter';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(59, 130, 246, 0.8)';
+    ctx.shadowBlur = 10;
     ctx.fillText(gameState.challengeNotification, canvas.width / 2, 110);
     
     ctx.restore();
@@ -442,58 +450,91 @@ function render() {
 
   // Draw balls
   gameState.balls.forEach((ball) => {
+    // Outer glow (large)
+    const outerGlow = ctx.createRadialGradient(ball.x, ball.y, 0, ball.x, ball.y, ball.radius * 2.5);
+    outerGlow.addColorStop(0, ball.color.replace('0.9)', '0.4)'));
+    outerGlow.addColorStop(0.5, ball.color.replace('0.9)', '0.1)'));
+    outerGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = outerGlow;
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.radius * 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
     // Ball shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
     ctx.beginPath();
     ctx.ellipse(ball.x, ball.y + ball.radius + 5, ball.radius * 0.8, ball.radius * 0.3, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Ball
-    ctx.fillStyle = ball.color;
+    // Main ball with gradient
+    const ballGradient = ctx.createRadialGradient(
+      ball.x - ball.radius * 0.3, 
+      ball.y - ball.radius * 0.3, 
+      0, 
+      ball.x, 
+      ball.y, 
+      ball.radius
+    );
+    ballGradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+    ballGradient.addColorStop(0.3, ball.color);
+    ballGradient.addColorStop(1, ball.color.replace('0.9)', '0.6)'));
+    
+    ctx.fillStyle = ballGradient;
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Ball outline
-    ctx.strokeStyle = "white";
+    // Electric outline
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
     ctx.lineWidth = 2;
     ctx.stroke();
     
-    // Ball shine
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    // Bright shine spot
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
     ctx.beginPath();
-    ctx.arc(ball.x - ball.radius * 0.3, ball.y - ball.radius * 0.3, ball.radius * 0.3, 0, Math.PI * 2);
+    ctx.arc(ball.x - ball.radius * 0.4, ball.y - ball.radius * 0.4, ball.radius * 0.25, 0, Math.PI * 2);
     ctx.fill();
   });
 
   // Draw hand zones
   gameState.hands.forEach((hand, index) => {
     const glowGradient = ctx.createRadialGradient(hand.x, hand.y, 0, hand.x, hand.y, config.handRadius * 1.5);
-    glowGradient.addColorStop(0, 'rgba(100, 200, 255, 0.3)');
-    glowGradient.addColorStop(1, 'rgba(100, 200, 255, 0)');
+    glowGradient.addColorStop(0, 'rgba(147, 197, 253, 0.4)');
+    glowGradient.addColorStop(0.5, 'rgba(96, 165, 250, 0.2)');
+    glowGradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
     ctx.fillStyle = glowGradient;
     ctx.beginPath();
     ctx.arc(hand.x, hand.y, config.handRadius * 1.5, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+    ctx.strokeStyle = "rgba(147, 197, 253, 0.9)";
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.arc(hand.x, hand.y, config.handRadius, 0, Math.PI * 2);
     ctx.stroke();
 
-    ctx.fillStyle = "rgba(100, 200, 255, 0.3)";
+    ctx.fillStyle = "rgba(96, 165, 250, 0.3)";
     ctx.fill();
 
-    ctx.fillStyle = "white";
+    // Inner bright ring
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(hand.x, hand.y, config.handRadius * 0.7, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(147, 197, 253, 1)";
     ctx.beginPath();
     ctx.arc(hand.x, hand.y, 5, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = "white";
-    ctx.font = "bold 16px Arial";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.font = "bold 14px Inter";
     ctx.textAlign = "center";
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+    ctx.shadowBlur = 4;
     ctx.fillText(`Hand ${index + 1}`, hand.x, hand.y - config.handRadius - 10);
+    ctx.shadowBlur = 0;
   });
 
   // Draw challenge notification
@@ -501,21 +542,26 @@ function render() {
 
   // Draw countdown
   if (gameState.isCountingDown) {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    ctx.fillStyle = "white";
-    ctx.font = "bold 72px Arial";
+    ctx.fillStyle = "#93c5fd";
+    ctx.font = "bold 72px Inter";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
+    ctx.shadowColor = 'rgba(59, 130, 246, 0.8)';
+    ctx.shadowBlur = 20;
     ctx.fillText(
       Math.ceil(gameState.countdown),
       canvas.width / 2,
       canvas.height / 2,
     );
 
-    ctx.font = "bold 24px Arial";
-    ctx.fillText("Get Ready!", canvas.width / 2, canvas.height / 2 + 60);
+    ctx.font = "bold 24px Inter";
+    ctx.fillStyle = "#94a3b8";
+    ctx.shadowBlur = 10;
+    ctx.fillText("The Storm Approaches...", canvas.width / 2, canvas.height / 2 + 60);
+    ctx.shadowBlur = 0;
   }
 }
 
