@@ -6,8 +6,96 @@ const config = {
   bounceVelocity: -8,
   handRadius: 50,
   countdownTime: 3,
-  particleCount: 15, // Particles per bounce
+  particleCount: 15,
+  challengeInterval: 30, // New challenge every 30 seconds
 };
+
+// Challenge types
+const CHALLENGES = {
+  SPEED_UP: 'speedUp',
+  MULTI_BALL: 'multiBall',
+  BARRIERS: 'barriers'
+};
+
+// Barrier class
+class Barrier {
+  constructor(x, y, width, height) {
+    this.x = x;
+    this.y = y;
+    this.width = width;
+    this.height = height;
+    this.color = 'rgba(255, 100, 100, 0.7)';
+  }
+
+  draw(ctx) {
+    // Outer glow
+    ctx.shadowColor = 'rgba(255, 100, 100, 0.8)';
+    ctx.shadowBlur = 20;
+    
+    ctx.fillStyle = this.color;
+    ctx.fillRect(this.x, this.y, this.width, this.height);
+    
+    // Reset shadow
+    ctx.shadowBlur = 0;
+    
+    // Border
+    ctx.strokeStyle = 'rgba(255, 150, 150, 1)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(this.x, this.y, this.width, this.height);
+    
+    // Diagonal stripes
+    ctx.strokeStyle = 'rgba(255, 200, 200, 0.5)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < this.width + this.height; i += 15) {
+      ctx.beginPath();
+      ctx.moveTo(this.x + i, this.y);
+      ctx.lineTo(this.x, this.y + i);
+      ctx.stroke();
+    }
+  }
+
+  checkCollision(ball) {
+    // Check if ball intersects with barrier
+    const closestX = Math.max(this.x, Math.min(ball.x, this.x + this.width));
+    const closestY = Math.max(this.y, Math.min(ball.y, this.y + this.height));
+    
+    const dx = ball.x - closestX;
+    const dy = ball.y - closestY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    return distance < ball.radius;
+  }
+
+  bounceOff(ball) {
+    // Determine which side was hit
+    const ballCenterX = ball.x;
+    const ballCenterY = ball.y;
+    
+    const left = this.x;
+    const right = this.x + this.width;
+    const top = this.y;
+    const bottom = this.y + this.height;
+    
+    // Calculate distances to each edge
+    const distToLeft = Math.abs(ballCenterX - left);
+    const distToRight = Math.abs(ballCenterX - right);
+    const distToTop = Math.abs(ballCenterY - top);
+    const distToBottom = Math.abs(ballCenterY - bottom);
+    
+    const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+    
+    // Bounce based on closest edge
+    if (minDist === distToLeft || minDist === distToRight) {
+      ball.vx *= -0.9;
+      if (minDist === distToLeft) ball.x = left - ball.radius;
+      else ball.x = right + ball.radius;
+    } else {
+      ball.vy *= -0.9;
+      if (minDist === distToTop) ball.y = top - ball.radius;
+      else ball.y = bottom + ball.radius;
+    }
+  }
+}
 
 // Particle class
 class Particle {
@@ -15,9 +103,9 @@ class Particle {
     this.x = x;
     this.y = y;
     this.vx = (Math.random() - 0.5) * 8;
-    this.vy = (Math.random() - 0.5) * 8 - 2; // Bias upward
-    this.life = 1.0; // 1.0 = full life, 0 = dead
-    this.decay = Math.random() * 0.02 + 0.01; // How fast it fades
+    this.vy = (Math.random() - 0.5) * 8 - 2;
+    this.life = 1.0;
+    this.decay = Math.random() * 0.02 + 0.01;
     this.size = Math.random() * 4 + 2;
     this.color = color;
     this.gravity = 0.15;
@@ -28,14 +116,13 @@ class Particle {
     this.y += this.vy;
     this.vy += this.gravity;
     this.life -= this.decay;
-    return this.life > 0; // Return false when dead
+    return this.life > 0;
   }
 
   draw(ctx) {
     ctx.save();
     ctx.globalAlpha = this.life;
     
-    // Outer glow
     const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size * 2);
     gradient.addColorStop(0, this.color);
     gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
@@ -45,7 +132,6 @@ class Particle {
     ctx.arc(this.x, this.y, this.size * 2, 0, Math.PI * 2);
     ctx.fill();
     
-    // Inner bright core
     ctx.fillStyle = this.color;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
@@ -60,6 +146,7 @@ let gameState = {
   balls: [],
   hands: [],
   particles: [],
+  barriers: [],
   score: 0,
   highScore: 0,
   gameOver: false,
@@ -68,6 +155,11 @@ let gameState = {
   countdown: 0,
   isCountingDown: false,
   isNewHighScore: false,
+  lastChallengeTime: 0,
+  activeChallenges: [],
+  currentGravity: config.gravity,
+  challengeNotification: null,
+  notificationTimer: 0,
 };
 
 // Canvas setup
@@ -107,6 +199,68 @@ async function saveHighScore(score) {
   }
 }
 
+// Show challenge notification
+function showChallengeNotification(message) {
+  gameState.challengeNotification = message;
+  gameState.notificationTimer = 3; // Show for 3 seconds
+}
+
+// Add a new challenge
+function addChallenge() {
+  const availableChallenges = Object.values(CHALLENGES);
+  const randomChallenge = availableChallenges[Math.floor(Math.random() * availableChallenges.length)];
+  
+  gameState.activeChallenges.push(randomChallenge);
+  
+  switch (randomChallenge) {
+    case CHALLENGES.SPEED_UP:
+      gameState.currentGravity += 0.15;
+      showChallengeNotification('⚡ SPEED BOOST!');
+      createParticleBurst(canvas.width / 2, 50, 'rgba(255, 255, 0, 0.8)');
+      break;
+      
+    case CHALLENGES.MULTI_BALL:
+      addNewBall();
+      showChallengeNotification('🔴 SECOND BALL!');
+      break;
+      
+    case CHALLENGES.BARRIERS:
+      addBarriers();
+      showChallengeNotification('🚧 BARRIERS APPEAR!');
+      break;
+  }
+}
+
+// Add a new ball
+function addNewBall() {
+  const hue = gameState.balls.length * 120;
+  gameState.balls.push({
+    x: canvas.width / 2,
+    y: 100,
+    vx: (Math.random() - 0.5) * 4,
+    vy: 2,
+    radius: config.ballRadius,
+    color: `hsl(${hue}, 70%, 60%)`,
+  });
+  
+  // Particle burst for new ball
+  createParticleBurst(canvas.width / 2, 100, `hsl(${hue}, 70%, 60%)`);
+}
+
+// Add random barriers
+function addBarriers() {
+  const numBarriers = Math.floor(Math.random() * 2) + 2; // 2-3 barriers
+  
+  for (let i = 0; i < numBarriers; i++) {
+    const width = Math.random() * 80 + 60;
+    const height = 20;
+    const x = Math.random() * (canvas.width - width);
+    const y = Math.random() * (canvas.height * 0.6) + canvas.height * 0.2; // Middle 60% of screen
+    
+    gameState.barriers.push(new Barrier(x, y, width, height));
+  }
+}
+
 // Create particle burst at position
 function createParticleBurst(x, y, color) {
   for (let i = 0; i < config.particleCount; i++) {
@@ -142,12 +296,20 @@ function initBalls() {
 // Update ball physics
 function updateBalls() {
   gameState.balls.forEach((ball) => {
-    // Apply gravity
-    ball.vy += config.gravity;
+    // Apply gravity (affected by challenges)
+    ball.vy += gameState.currentGravity;
 
     // Update position
     ball.x += ball.vx;
     ball.y += ball.vy;
+
+    // Check barrier collisions
+    gameState.barriers.forEach(barrier => {
+      if (barrier.checkCollision(ball)) {
+        barrier.bounceOff(ball);
+        createParticleBurst(ball.x, ball.y, 'rgba(255, 100, 100, 0.8)');
+      }
+    });
 
     // Bounce off left/right walls
     if (ball.x - ball.radius < 0 || ball.x + ball.radius > canvas.width) {
@@ -155,7 +317,6 @@ function updateBalls() {
       ball.x =
         ball.x < canvas.width / 2 ? ball.radius : canvas.width - ball.radius;
       
-      // Wall bounce particles
       createParticleBurst(ball.x, ball.y, 'rgba(255, 255, 255, 0.6)');
     }
 
@@ -164,7 +325,6 @@ function updateBalls() {
       ball.vy *= -1;
       ball.y = ball.radius;
       
-      // Ceiling bounce particles
       createParticleBurst(ball.x, ball.y, 'rgba(255, 255, 255, 0.6)');
     }
   });
@@ -174,27 +334,19 @@ function updateBalls() {
 function checkCollisions() {
   gameState.balls.forEach((ball) => {
     gameState.hands.forEach((hand) => {
-      // Calculate distance between ball center and hand center
       const dx = ball.x - hand.x;
       const dy = ball.y - hand.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
-      // Check if ball is colliding with hand zone
       if (distance < ball.radius + config.handRadius) {
-        // Create particle burst at collision point
         const collisionX = hand.x + (dx / distance) * config.handRadius;
         const collisionY = hand.y + (dy / distance) * config.handRadius;
         
-        // Use ball color for particles
         createParticleBurst(collisionX, collisionY, ball.color);
         
-        // Bounce ball upward
         ball.vy = config.bounceVelocity;
-
-        // Add slight horizontal velocity based on hand position
         ball.vx += dx * 0.1;
 
-        // Prevent ball from getting stuck inside hand zone
         const angle = Math.atan2(dy, dx);
         const targetX =
           hand.x + Math.cos(angle) * (ball.radius + config.handRadius);
@@ -212,7 +364,7 @@ function checkGameOver() {
   return gameState.balls.some((ball) => ball.y - ball.radius > canvas.height);
 }
 
-// Update score (time in seconds)
+// Update score and check for challenges
 function updateScore() {
   if (gameState.startTime && !gameState.gameOver) {
     gameState.score = Math.floor((Date.now() - gameState.startTime) / 1000);
@@ -225,12 +377,49 @@ function updateScore() {
       highScoreDisplay.textContent = gameState.highScore;
       highScoreDisplay.classList.add('beating-record');
     }
+    
+    // Check if it's time for a new challenge
+    if (gameState.score > 0 && gameState.score % config.challengeInterval === 0 && 
+        gameState.score !== gameState.lastChallengeTime) {
+      gameState.lastChallengeTime = gameState.score;
+      addChallenge();
+    }
+  }
+}
+
+// Draw challenge notification
+function drawNotification() {
+  if (gameState.notificationTimer > 0) {
+    gameState.notificationTimer -= 1/60;
+    
+    const alpha = Math.min(gameState.notificationTimer, 1);
+    
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    
+    // Background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(canvas.width / 2 - 150, 80, 300, 60);
+    
+    // Border
+    ctx.strokeStyle = 'rgba(255, 215, 0, 0.8)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(canvas.width / 2 - 150, 80, 300, 60);
+    
+    // Text
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 24px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(gameState.challengeNotification, canvas.width / 2, 110);
+    
+    ctx.restore();
   }
 }
 
 // Render everything
 function render() {
-  // Draw video feed directly onto canvas
+  // Draw video feed
   const webcam = document.getElementById("webcam");
   if (webcam && webcam.readyState === webcam.HAVE_ENOUGH_DATA) {
     ctx.save();
@@ -245,8 +434,11 @@ function render() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  // Draw particles first (behind everything)
+  // Draw particles
   drawParticles();
+
+  // Draw barriers
+  gameState.barriers.forEach(barrier => barrier.draw(ctx));
 
   // Draw balls
   gameState.balls.forEach((ball) => {
@@ -274,9 +466,8 @@ function render() {
     ctx.fill();
   });
 
-  // Draw hand zones as paddles
+  // Draw hand zones
   gameState.hands.forEach((hand, index) => {
-    // Hand glow effect
     const glowGradient = ctx.createRadialGradient(hand.x, hand.y, 0, hand.x, hand.y, config.handRadius * 1.5);
     glowGradient.addColorStop(0, 'rgba(100, 200, 255, 0.3)');
     glowGradient.addColorStop(1, 'rgba(100, 200, 255, 0)');
@@ -285,31 +476,30 @@ function render() {
     ctx.arc(hand.x, hand.y, config.handRadius * 1.5, 0, Math.PI * 2);
     ctx.fill();
 
-    // Outer circle
     ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.arc(hand.x, hand.y, config.handRadius, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Inner fill
     ctx.fillStyle = "rgba(100, 200, 255, 0.3)";
     ctx.fill();
 
-    // Center dot
     ctx.fillStyle = "white";
     ctx.beginPath();
     ctx.arc(hand.x, hand.y, 5, 0, Math.PI * 2);
     ctx.fill();
 
-    // Hand label
     ctx.fillStyle = "white";
     ctx.font = "bold 16px Arial";
     ctx.textAlign = "center";
     ctx.fillText(`Hand ${index + 1}`, hand.x, hand.y - config.handRadius - 10);
   });
 
-  // Draw countdown if active
+  // Draw challenge notification
+  drawNotification();
+
+  // Draw countdown
   if (gameState.isCountingDown) {
     ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -333,7 +523,6 @@ function render() {
 function gameLoop() {
   if (gameState.gameOver) return;
 
-  // Handle countdown
   if (gameState.isCountingDown) {
     gameState.countdown -= 1 / 60;
 
@@ -342,13 +531,11 @@ function gameLoop() {
       gameState.startTime = Date.now();
     }
   } else {
-    // Only update game logic after countdown finishes
     updateBalls();
     checkCollisions();
     updateParticles();
     updateScore();
 
-    // Check lose condition
     if (checkGameOver()) {
       endGame();
       return;
@@ -366,24 +553,25 @@ async function startGame() {
   gameState.score = 0;
   gameState.hands = [];
   gameState.particles = [];
+  gameState.barriers = [];
   gameState.countdown = config.countdownTime;
   gameState.isCountingDown = true;
   gameState.isNewHighScore = false;
+  gameState.lastChallengeTime = 0;
+  gameState.activeChallenges = [];
+  gameState.currentGravity = config.gravity;
+  gameState.challengeNotification = null;
+  gameState.notificationTimer = 0;
   
-  // Remove beating record animation
   highScoreDisplay.classList.remove('beating-record');
 
   initBalls();
 
-  // Initialize hand tracking if not already done
   if (!window.handTrackingInitialized) {
-    // Show loading overlay
     loadingOverlay.classList.remove("hidden");
     loadingStatus.textContent = "Requesting camera access...";
 
     const webcam = document.getElementById("webcam");
-
-    // Update loading status
     loadingStatus.textContent = "Loading MediaPipe Hands model...";
 
     const success = await window.handTracking.setupHandTracking(
@@ -393,7 +581,6 @@ async function startGame() {
       },
     );
 
-    // Hide loading overlay
     loadingOverlay.classList.add("hidden");
 
     if (!success) {
@@ -414,12 +601,10 @@ async function endGame() {
   gameState.gameOver = true;
   cancelAnimationFrame(gameState.animationId);
 
-  // Save high score if it's a new record
   if (gameState.isNewHighScore) {
     await saveHighScore(gameState.highScore);
   }
 
-  // Create game over message with high score indicator
   let emoji, message, extraMessage;
   
   if (gameState.isNewHighScore) {
@@ -463,10 +648,8 @@ startButton.addEventListener("click", startGame);
 // Check if TensorFlow.js is loaded
 function checkTensorFlowLoaded() {
   if (typeof tf !== "undefined" && typeof handPoseDetection !== "undefined") {
-    // TensorFlow.js and dependencies loaded
     loadingOverlay.classList.add("hidden");
   } else {
-    // Check again after a short delay
     setTimeout(checkTensorFlowLoaded, 100);
   }
 }
